@@ -19,14 +19,20 @@ pip install -r requirements.txt
 ```
 
 ### 3. Share Existing Dataset
-If you have the CIFAR-10 dataset stored in an external directory (e.g., `/opt/data/CIFAR10`), you can point the project to it using the `FLGO_DATA_ROOT` environment variable.
+If you have the CIFAR-10 dataset stored in an external directory (e.g., `/opt/data/cifar/cifar-10-batches-py`), you can point the project to it using environment variables.
 
-**Dataset Directory Structure Requirement:**
-The directory should contain a `CIFAR10` folder, which in turn contains the raw CIFAR-10 files (e.g., `cifar-10-batches-py`).
-
+**Recommended for your server setup:**
 ```bash
-# On Linux/macOS
+# Directly point to the folder containing 'cifar-10-batches-py'
+export FLGO_CIFAR10_PATH=/opt/data/cifar
+```
+
+**Alternative (Standard FLGo structure):**
+If you have a root folder with multiple datasets:
+```bash
 export FLGO_DATA_ROOT=/opt/data
+# This expects datasets at /opt/data/CIFAR10, /opt/data/MNIST, etc.
+```
 
 # On Windows (PowerShell)
 $env:FLGO_DATA_ROOT="C:\path\to\data"
