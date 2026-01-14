@@ -256,9 +256,9 @@ def run_experiment(args):
             return {str(k): convert_to_serializable(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_to_serializable(v) for v in obj]
-        elif isinstance(obj, (np.int64, np.int32, np.intc)):
+        elif isinstance(obj, (np.int64, np.int32, np.intc, int)):
             return int(obj)
-        elif isinstance(obj, (np.float64, np.float32, np.float16)):
+        elif isinstance(obj, (np.float64, np.float32, np.float16, float)):
             return float(obj)
         elif isinstance(obj, (np.bool_, bool)):
             return bool(obj)

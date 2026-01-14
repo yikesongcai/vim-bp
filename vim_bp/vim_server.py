@@ -212,8 +212,8 @@ class VIMServer(BasicServer):
         
         selected = self.mab.select_clients(
             budget=self.round_budget,
-            min_clients=max(1, int(self.num_clients * 0.05)),  # At least 5%
-            max_clients=self.clients_per_round
+            min_clients=max(1, int(self.num_clients * 0.05)),
+            max_clients=self.num_clients
         )
         
         return selected
@@ -226,11 +226,10 @@ class VIMServer(BasicServer):
         Phase 1: Normal training (mtype=0) if current_round <= pretrain_rounds
         Phase 2: Unlearning and verification (mtype=1) if current_round > pretrain_rounds
         """
-        pretrain_rounds = getattr(self.option, 'pretrain_rounds', 0)
+        pretrain_rounds = self.option.get('pretrain_rounds', 0)
         is_pretraining = self.current_round <= pretrain_rounds
         
-        # Step 1: Select clients using MAB (or random during pretraining if budget doesn't apply)
-        # Note: We use MAB even during pretraining to warm up selection, but reward is always 1
+        # Step 1: Select clients using MAB
         self.selected_clients = self.select_clients_mab()
         
         if len(self.selected_clients) == 0:
