@@ -1,0 +1,40 @@
+# Datasets
+flgo/benchmark/RAW_DATA/
+**/RAW_DATA/
+**/*.zip
+**/*.tar.gz
+**/*.tar
+**/*.pt
+**/*.pth
+
+# Python/Conda
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.venv
+.conda/
+.pdm-python
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Experiment Results and Tasks
+vim_results/
+vim_task/
+runs/
+logs/
+*.json
+!experiment_config.json
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
