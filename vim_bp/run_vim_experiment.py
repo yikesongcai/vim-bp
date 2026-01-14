@@ -61,6 +61,8 @@ def parse_args():
                         help='Class to request unlearning for')
     parser.add_argument('--epsilon', type=float, default=0.05,
                         help='Radioactive trigger weight')
+    parser.add_argument('--pretrain_rounds', type=int, default=20,
+                        help='Number of initial normal training rounds')
     parser.add_argument('--loss_threshold', type=float, default=2.0,
                         help='Loss threshold for unlearning verification')
     parser.add_argument('--utility_threshold', type=float, default=0.5,
@@ -191,6 +193,7 @@ def run_experiment(args):
         
         # VIM-specific options
         'target_class': args.target_class,
+        'pretrain_rounds': args.pretrain_rounds,
         'epsilon': args.epsilon,
         'loss_threshold': args.loss_threshold,
         'utility_threshold': args.utility_threshold,
@@ -253,13 +256,15 @@ def run_experiment(args):
             return {str(k): convert_to_serializable(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_to_serializable(v) for v in obj]
-        elif isinstance(obj, (np.int64, np.int32)):
+        elif isinstance(obj, (np.int64, np.int32, np.intc)):
             return int(obj)
-        elif isinstance(obj, (np.float64, np.float32)):
+        elif isinstance(obj, (np.float64, np.float32, np.float16)):
             return float(obj)
         elif isinstance(obj, (np.bool_, bool)):
             return bool(obj)
-        return obj
+        elif obj is None:
+            return None
+        return str(obj) if hasattr(obj, '__str__') else obj
     
     serializable_results = convert_to_serializable(results)
     with open(results_path, 'w') as f:

@@ -223,16 +223,14 @@ class VIMServer(BasicServer):
         Modified iteration for VIM unlearning verification.
         
         Flow:
-        1. Select clients using MAB
-        2. Send unlearn request (mtype=1)
-        3. Verify submissions
-        4. Update MAB based on verification results
-        5. Aggregate only verified models
-        
-        Returns:
-            bool: True if global model was updated
+        Phase 1: Normal training (mtype=0) if current_round <= pretrain_rounds
+        Phase 2: Unlearning and verification (mtype=1) if current_round > pretrain_rounds
         """
-        # Step 1: Select clients using MAB
+        pretrain_rounds = getattr(self.option, 'pretrain_rounds', 0)
+        is_pretraining = self.current_round <= pretrain_rounds
+        
+        # Step 1: Select clients using MAB (or random during pretraining if budget doesn't apply)
+        # Note: We use MAB even during pretraining to warm up selection, but reward is always 1
         self.selected_clients = self.select_clients_mab()
         
         if len(self.selected_clients) == 0:
@@ -242,50 +240,57 @@ class VIMServer(BasicServer):
         round_cost = sum(self.mab.costs[cid] for cid in self.selected_clients)
         self.budget_consumption.append(round_cost)
         
-        # Step 2: Communicate with mtype=1 (unlearn request)
-        packages = self.communicate(self.selected_clients, mtype=1)
+        # Step 2: Communicate
+        # mtype=0 for training, mtype=1 for unlearning
+        mtype = 0 if is_pretraining else 1
+        packages = self.communicate(self.selected_clients, mtype=mtype)
         models = packages.get('model', [])
         
         if len(models) == 0:
             return False
         
-        # Step 3: Verify each submission
+        # Step 3: Verify and Update
         verified_models = []
         round_verification = {}
         
-        for i, (model, client_id) in enumerate(zip(models, self.selected_clients)):
-            verified, details = self.verify_submission(model, client_id)
-            round_verification[client_id] = details
-            
-            # Step 4: Update MAB
-            reward = 1.0 if verified else 0.0
-            self.mab.update(client_id, reward)
-            
-            if verified:
-                verified_models.append(model)
+        if is_pretraining:
+            # During pretraining, all selected models are accepted
+            verified_models = models
+            for cid in self.selected_clients:
+                self.mab.update(cid, 1.0) # Always reward 1.0 during pretraining
+                round_verification[cid] = {'status': 'pretraining'}
+            success_rate = 1.0
+        else:
+            # During unlearning, verify each submission
+            for i, (model, client_id) in enumerate(zip(models, self.selected_clients)):
+                verified, details = self.verify_submission(model, client_id)
+                round_verification[client_id] = details
+                
+                # Update MAB
+                reward = 1.0 if verified else 0.0
+                self.mab.update(client_id, reward)
+                
+                if verified:
+                    verified_models.append(model)
+            success_rate = len(verified_models) / max(len(models), 1)
         
         self.verification_results.append(round_verification)
-        
-        # Calculate round success rate
-        num_verified = len(verified_models)
-        success_rate = num_verified / max(len(models), 1)
         self.unlearning_success_rate.append(success_rate)
         
         # Log results
         if hasattr(self, 'gv') and hasattr(self.gv, 'logger'):
+            phase_str = "Pretraining" if is_pretraining else "VIM Verification"
             self.gv.logger.info(
-                f"VIM Round {self.current_round}: "
+                f"Round {self.current_round} ({phase_str}): "
                 f"Selected {len(self.selected_clients)} clients, "
-                f"Verified {num_verified}/{len(models)}, "
+                f"Verified {len(verified_models)}/{len(models)}, "
                 f"Success rate: {success_rate:.2%}"
             )
         
-        # Step 5: Aggregate only verified models
+        # Step 5: Aggregate
         if len(verified_models) > 0:
             self.model = self.aggregate(verified_models)
         
-        # Always return True to progress to next round
-        # (FLGo only increments round when iterate returns True or None)
         return True
     
     def pack(self, client_id, mtype=0, *args, **kwargs):
