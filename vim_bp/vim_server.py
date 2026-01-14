@@ -259,11 +259,21 @@ class VIMServer(BasicServer):
                 self.mab.update(cid, 1.0) # Always reward 1.0 during pretraining
                 round_verification[cid] = {'status': 'pretraining'}
             success_rate = 1.0
+            
+            # Check if this is the last pretraining round and log evaluation
+            if self.current_round == pretrain_rounds:
+                val_res = self.test(self.model)
+                self.gv.logger.info(f"--- Pretraining Finished --- Final Accuracy: {val_res['accuracy']:.2%}")
         else:
             # During unlearning, verify each submission
+            total_probe_loss = 0
+            total_utility = 0
             for i, (model, client_id) in enumerate(zip(models, self.selected_clients)):
                 verified, details = self.verify_submission(model, client_id)
                 round_verification[client_id] = details
+                
+                total_probe_loss += details.get('probe_loss', 0)
+                total_utility += details.get('normal_accuracy', 0)
                 
                 # Update MAB
                 reward = 1.0 if verified else 0.0
@@ -271,19 +281,27 @@ class VIMServer(BasicServer):
                 
                 if verified:
                     verified_models.append(model)
-            success_rate = len(verified_models) / max(len(models), 1)
+            
+            num_clients = max(len(models), 1)
+            success_rate = len(verified_models) / num_clients
+            
+            # Detailed console logging for debugging
+            avg_probe = total_probe_loss / num_clients
+            avg_util = total_utility / num_clients
+            self.gv.logger.info(
+                f">>> VIM Metrics: Avg Probe Loss: {avg_probe:.4f} (Target > {self.loss_threshold}), "
+                f"Avg Utility: {avg_util:.2%} (Target > {self.utility_threshold})"
+            )
         
         self.verification_results.append(round_verification)
         self.unlearning_success_rate.append(success_rate)
         
-        # Log results
+        # Phase header logging
         if hasattr(self, 'gv') and hasattr(self.gv, 'logger'):
             phase_str = "Pretraining" if is_pretraining else "VIM Verification"
             self.gv.logger.info(
-                f"Round {self.current_round} ({phase_str}): "
-                f"Selected {len(self.selected_clients)} clients, "
-                f"Verified {len(verified_models)}/{len(models)}, "
-                f"Success rate: {success_rate:.2%}"
+                f"Round {self.current_round} ({phase_str}): Selected {len(self.selected_clients)} clients, "
+                f"Verified {len(verified_models)}/{len(models)}, Success: {success_rate:.2%}"
             )
         
         # Step 5: Aggregate

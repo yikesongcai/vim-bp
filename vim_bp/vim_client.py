@@ -50,6 +50,27 @@ class VIMClient(BasicClient):
         
         # Register unlearn action for message type 1 (unlearn request)
         self.actions[1] = self.reply_unlearn
+        
+        # Trigger parameters
+        self.trigger_seed = option.get('trigger_seed', 42)
+        self.epsilon = option.get('epsilon', 0.05)
+        self.target_class = option.get('target_class', 0)
+    
+    def initialize(self, *args, **kwargs):
+        """Initialize client and apply radioactive transform to local data."""
+        super().initialize(*args, **kwargs)
+        
+        if self.train_data is not None:
+            from .radioactive_data import RadioactiveTransform, RadioactiveDataset
+            # Create the same transform as the server
+            # Note: image_size will be determined by the dataset in the transform
+            rt = RadioactiveTransform(
+                epsilon=self.epsilon,
+                target_class=self.target_class,
+                trigger_seed=self.trigger_seed
+            )
+            # Wrap the local training data
+            self.train_data = RadioactiveDataset(self.train_data, rt, apply_to_all=True)
     
     def set_client_type(self, client_type):
         """
@@ -110,8 +131,9 @@ class VIMClient(BasicClient):
         device = self.device
         model = model.to(device)
         
-        # Use SGD for gradient ascent (we negate the gradient)
-        optimizer = torch.optim.SGD(model.parameters(), lr=self.unlearn_lr)
+        # Use a higher learning rate for GA if needed, default to self.learning_rate * 5
+        lr = self.unlearn_lr if self.unlearn_lr else self.learning_rate * 5
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
         criterion = nn.CrossEntropyLoss()
         
         # Create data loader for unlearn data
@@ -122,6 +144,7 @@ class VIMClient(BasicClient):
             shuffle=True
         )
         
+        # Perform GA for multiple steps to ensure "forgetting"
         for step in range(self.unlearn_steps):
             for batch_data in unlearn_loader:
                 images, labels = batch_data
@@ -139,7 +162,9 @@ class VIMClient(BasicClient):
                         param.grad = -param.grad
                 
                 optimizer.step()
-        
+                
+        # Zero out gradients before returning
+        model.zero_grad()
         return model
     
     def add_noise_to_model(self, model):
